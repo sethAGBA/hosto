@@ -7,6 +7,12 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../models/patient.dart';
 import '../models/medical_staff.dart';
+import '../models/bed.dart';
+import '../models/consultation.dart';
+import '../models/emergency_box.dart';
+import '../models/emergency_visit.dart';
+import '../models/exam_analysis.dart';
+import '../models/room.dart';
 import '../models/user.dart';
 
 class DatabaseService {
@@ -46,20 +52,32 @@ class DatabaseService {
     _db = await dbFactory.openDatabase(
       pathToOpen,
       options: OpenDatabaseOptions(
-        version: 4,
+        version: 7,
         onCreate: (db, version) async {
           await _createCoreTables(db);
           await _ensurePatientColumns(db);
           await _ensureAuditLogsTable(db);
+          await _ensureBedsTable(db);
+          await _ensureConsultationColumns(db);
+          await _ensureExamAnalysisColumns(db);
+          await _ensureUrgencesTables(db);
         },
         onOpen: (db) async {
           await _ensurePatientColumns(db);
           await _ensureAuditLogsTable(db);
+          await _ensureBedsTable(db);
+          await _ensureConsultationColumns(db);
+          await _ensureExamAnalysisColumns(db);
+          await _ensureUrgencesTables(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           await _createCoreTables(db);
           await _ensurePatientColumns(db);
           await _ensureAuditLogsTable(db);
+          await _ensureBedsTable(db);
+          await _ensureConsultationColumns(db);
+          await _ensureExamAnalysisColumns(db);
+          await _ensureUrgencesTables(db);
         },
       ),
     );
@@ -146,6 +164,17 @@ class DatabaseService {
     ''');
 
     await db.execute('''
+      CREATE TABLE IF NOT EXISTS lits (
+        id TEXT PRIMARY KEY,
+        room_id TEXT,
+        bed_number TEXT,
+        status TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    ''');
+
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS consultations (
         id TEXT PRIMARY KEY,
         patient_id TEXT,
@@ -201,9 +230,37 @@ class DatabaseService {
         priority TEXT,
         status TEXT,
         requested_at INTEGER,
+        scheduled_at INTEGER,
         completed_at INTEGER,
         result_summary TEXT,
+        notes TEXT,
         created_at INTEGER,
+        updated_at INTEGER
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS urgences (
+        id TEXT PRIMARY KEY,
+        patient_name TEXT,
+        age INTEGER,
+        reason TEXT,
+        priority TEXT,
+        status TEXT,
+        arrival_at INTEGER,
+        box_label TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS emergency_boxes (
+        id TEXT PRIMARY KEY,
+        label TEXT,
+        status TEXT,
+        patient_name TEXT,
+        priority TEXT,
         updated_at INTEGER
       )
     ''');
@@ -395,6 +452,97 @@ class DatabaseService {
     ''');
   }
 
+  Future<void> _ensureBedsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS lits (
+        id TEXT PRIMARY KEY,
+        room_id TEXT,
+        bed_number TEXT,
+        status TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    ''');
+  }
+
+  Future<void> _ensureConsultationColumns(Database db) async {
+    final rows = await db.rawQuery('PRAGMA table_info(consultations)');
+    final existing = rows.map((row) => row['name'] as String).toSet();
+    final needed = <String, String>{
+      'patient_name': 'TEXT',
+      'doctor_name': 'TEXT',
+      'location': 'TEXT',
+      'notes': 'TEXT',
+    };
+    for (final entry in needed.entries) {
+      if (!existing.contains(entry.key)) {
+        await db.execute('ALTER TABLE consultations ADD COLUMN ${entry.key} ${entry.value}');
+      }
+    }
+  }
+
+  Future<void> _ensureExamAnalysisColumns(Database db) async {
+    final rows = await db.rawQuery('PRAGMA table_info(examens_analyses)');
+    final existing = rows.map((row) => row['name'] as String).toSet();
+    final needed = <String, String>{
+      'scheduled_at': 'INTEGER',
+      'notes': 'TEXT',
+    };
+    for (final entry in needed.entries) {
+      if (!existing.contains(entry.key)) {
+        await db.execute('ALTER TABLE examens_analyses ADD COLUMN ${entry.key} ${entry.value}');
+      }
+    }
+  }
+
+  Future<void> _ensureUrgencesTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS urgences (
+        id TEXT PRIMARY KEY,
+        patient_name TEXT,
+        age INTEGER,
+        reason TEXT,
+        priority TEXT,
+        status TEXT,
+        arrival_at INTEGER,
+        box_label TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS emergency_boxes (
+        id TEXT PRIMARY KEY,
+        label TEXT,
+        status TEXT,
+        patient_name TEXT,
+        priority TEXT,
+        updated_at INTEGER
+      )
+    ''');
+
+    final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM emergency_boxes')) ?? 0;
+    if (count == 0) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final labels = ['Box 1', 'Box 2', 'Box 3', 'Dechocage'];
+      for (final label in labels) {
+        await db.insert(
+          'emergency_boxes',
+          {
+            'id': 'box_${label.replaceAll(' ', '_').toLowerCase()}',
+            'label': label,
+            'status': 'Libre',
+            'patient_name': null,
+            'priority': 'Vert',
+            'updated_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    }
+  }
+
   Future<List<User>> getUsers() async {
     final database = await db;
     final rows = await database.query('users');
@@ -488,6 +636,170 @@ class DatabaseService {
   Future<void> deletePersonnel(String id) async {
     final database = await db;
     await database.delete('personnel_medical', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Room>> getRooms() async {
+    final database = await db;
+    final rows = await database.query('chambres_lits', orderBy: 'room_number');
+    return rows.map(Room.fromMap).toList();
+  }
+
+  Future<void> insertRoom(Room room) async {
+    final database = await db;
+    await database.insert('chambres_lits', room.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateRoom(Room room) async {
+    final database = await db;
+    await database.update('chambres_lits', room.toMap(), where: 'id = ?', whereArgs: [room.id]);
+  }
+
+  Future<void> deleteRoom(String id) async {
+    final database = await db;
+    await database.delete('chambres_lits', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Bed>> getBedsByRoom(String roomId) async {
+    final database = await db;
+    final rows = await database.query('lits', where: 'room_id = ?', whereArgs: [roomId], orderBy: 'bed_number');
+    return rows.map(Bed.fromMap).toList();
+  }
+
+  Future<List<Bed>> getBeds() async {
+    final database = await db;
+    final rows = await database.query('lits', orderBy: 'room_id, bed_number');
+    return rows.map(Bed.fromMap).toList();
+  }
+
+  Future<void> insertBed(Bed bed) async {
+    final database = await db;
+    await database.insert('lits', bed.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateBed(Bed bed) async {
+    final database = await db;
+    await database.update('lits', bed.toMap(), where: 'id = ?', whereArgs: [bed.id]);
+  }
+
+  Future<void> deleteBedsByRoom(String roomId) async {
+    final database = await db;
+    await database.delete('lits', where: 'room_id = ?', whereArgs: [roomId]);
+  }
+
+  Future<void> syncBedsForRoom({required String roomId, required int bedCount}) async {
+    final database = await db;
+    final existing = await getBedsByRoom(roomId);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (existing.length > bedCount) {
+      final toRemove = existing.sublist(bedCount);
+      for (final bed in toRemove) {
+        await database.delete('lits', where: 'id = ?', whereArgs: [bed.id]);
+      }
+    } else if (existing.length < bedCount) {
+      for (int i = existing.length; i < bedCount; i++) {
+        final bedNumber = '${i + 1}'.padLeft(2, '0');
+        await database.insert(
+          'lits',
+          {
+            'id': 'bed_${roomId}_$bedNumber',
+            'room_id': roomId,
+            'bed_number': bedNumber,
+            'status': 'Libre',
+            'created_at': now,
+            'updated_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    }
+  }
+
+  Future<List<Consultation>> getConsultations({String? doctor}) async {
+    final database = await db;
+    if (doctor == null || doctor.trim().isEmpty || doctor == 'Tous') {
+      final rows = await database.query('consultations', orderBy: 'scheduled_at');
+      return rows.map(Consultation.fromMap).toList();
+    }
+    final rows = await database.query(
+      'consultations',
+      where: 'doctor_name = ?',
+      whereArgs: [doctor],
+      orderBy: 'scheduled_at',
+    );
+    return rows.map(Consultation.fromMap).toList();
+  }
+
+  Future<void> insertConsultation(Consultation consultation) async {
+    final database = await db;
+    await database.insert('consultations', consultation.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateConsultation(Consultation consultation) async {
+    final database = await db;
+    await database.update('consultations', consultation.toMap(), where: 'id = ?', whereArgs: [consultation.id]);
+  }
+
+  Future<void> deleteConsultation(String id) async {
+    final database = await db;
+    await database.delete('consultations', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<ExamAnalysis>> getExamAnalyses() async {
+    final database = await db;
+    final rows = await database.query('examens_analyses', orderBy: 'requested_at');
+    return rows.map(ExamAnalysis.fromMap).toList();
+  }
+
+  Future<void> insertExamAnalysis(ExamAnalysis exam) async {
+    final database = await db;
+    await database.insert('examens_analyses', exam.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateExamAnalysis(ExamAnalysis exam) async {
+    final database = await db;
+    await database.update('examens_analyses', exam.toMap(), where: 'id = ?', whereArgs: [exam.id]);
+  }
+
+  Future<void> deleteExamAnalysis(String id) async {
+    final database = await db;
+    await database.delete('examens_analyses', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<EmergencyVisit>> getEmergencyVisits() async {
+    final database = await db;
+    final rows = await database.query('urgences', orderBy: 'arrival_at');
+    return rows.map(EmergencyVisit.fromMap).toList();
+  }
+
+  Future<void> insertEmergencyVisit(EmergencyVisit visit) async {
+    final database = await db;
+    await database.insert('urgences', visit.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateEmergencyVisit(EmergencyVisit visit) async {
+    final database = await db;
+    await database.update('urgences', visit.toMap(), where: 'id = ?', whereArgs: [visit.id]);
+  }
+
+  Future<void> deleteEmergencyVisit(String id) async {
+    final database = await db;
+    await database.delete('urgences', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<EmergencyBox>> getEmergencyBoxes() async {
+    final database = await db;
+    final rows = await database.query('emergency_boxes', orderBy: 'label');
+    return rows.map(EmergencyBox.fromMap).toList();
+  }
+
+  Future<void> insertEmergencyBox(EmergencyBox box) async {
+    final database = await db;
+    await database.insert('emergency_boxes', box.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateEmergencyBox(EmergencyBox box) async {
+    final database = await db;
+    await database.update('emergency_boxes', box.toMap(), where: 'id = ?', whereArgs: [box.id]);
   }
 
   Future<Map<String, String>> getSettings(List<String> keys) async {
