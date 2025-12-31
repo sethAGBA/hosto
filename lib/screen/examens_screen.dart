@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/permission_scope.dart';
 
 class ExamensScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
@@ -168,14 +169,22 @@ class _ExamensScreenState extends State<ExamensScreen> with SingleTickerProvider
   }
 
   Widget _buildActionsRow() {
+    final canEdit = PermissionScope.of(context).canEdit('Examens');
+    final canView = PermissionScope.of(context).canView('Examens');
+    Widget guard(Widget child, bool enabled) {
+      return Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: AbsorbPointer(absorbing: !enabled, child: child),
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
-        _ActionButton(label: 'Programmer examen', icon: Icons.calendar_month, color: const Color(0xFF0EA5E9)),
-        _ActionButton(label: 'Saisir resultats', icon: Icons.edit_note, color: const Color(0xFF22C55E)),
-        _ActionButton(label: 'Valider', icon: Icons.verified_outlined, color: const Color(0xFFF59E0B)),
-        _ActionButton(label: 'Imprimer', icon: Icons.print_outlined, color: const Color(0xFF64748B)),
+        guard(_ActionButton(label: 'Programmer examen', icon: Icons.calendar_month, color: const Color(0xFF0EA5E9)), canEdit),
+        guard(_ActionButton(label: 'Saisir resultats', icon: Icons.edit_note, color: const Color(0xFF22C55E)), canEdit),
+        guard(_ActionButton(label: 'Valider', icon: Icons.verified_outlined, color: const Color(0xFFF59E0B)), canEdit),
+        guard(_ActionButton(label: 'Imprimer', icon: Icons.print_outlined, color: const Color(0xFF64748B)), canView),
       ],
     );
   }

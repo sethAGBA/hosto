@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/menu_item.dart';
+import '../models/user.dart';
 import '../services/notification_service.dart';
 import '../widgets/menu_item_widget.dart';
 import 'coming_soon_screen.dart';
@@ -17,6 +18,11 @@ import 'comptabilite_screen.dart';
 import 'parametres_screen.dart';
 import 'assurances_screen.dart';
 import 'interventions_screen.dart';
+import '../services/auth_service.dart';
+import 'login_screen.dart';
+import '../services/permission_service.dart';
+import '../widgets/permission_scope.dart';
+import 'access_denied_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -27,9 +33,16 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateMixin {
   final NotificationService _notificationService = NotificationService();
+  final PermissionService _permissionService = PermissionService();
   int selectedIndex = 0;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  PermissionController _permissionController = PermissionController(
+    role: UserRole.admin,
+    permissions: PermissionService.defaultPermissionsForRole(UserRole.admin),
+  );
+  bool _loadingPermissions = true;
+  List<MenuItem> _visibleMenuItems = [];
 
   final List<MenuItem> _menuItems = const [
     MenuItem(
@@ -114,6 +127,8 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeInOut);
     _animationController.forward();
     _notificationService.addListener(_onNotificationsChanged);
+    _visibleMenuItems = _menuItems;
+    _loadPermissions();
   }
 
   @override
@@ -125,6 +140,22 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
 
   void _onNotificationsChanged() {
     setState(() {});
+  }
+
+  Future<void> _loadPermissions() async {
+    final role = AuthService.currentUser?.role ?? UserRole.admin;
+    final permissions = await _permissionService.loadForRole(role);
+    final controller = PermissionController(role: role, permissions: permissions);
+    final visible = _menuItems.where((item) => controller.canView(_moduleKeyForTitle(item.title))).toList();
+    if (!mounted) return;
+    setState(() {
+      _permissionController = controller;
+      _visibleMenuItems = visible;
+      _loadingPermissions = false;
+      if (selectedIndex >= _visibleMenuItems.length) {
+        selectedIndex = 0;
+      }
+    });
   }
 
   void _showQuickAdmissionNotice() {
@@ -139,19 +170,23 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showQuickAdmissionNotice,
-        icon: const Icon(Icons.add_circle_outline),
-        label: const Text('Nouvelle admission'),
-        backgroundColor: const Color(0xFF0EA5A4),
-        foregroundColor: Colors.white,
-      ),
-      body: Row(
-        children: [
-          _buildSidebar(),
-          Expanded(child: _buildMainArea()),
-        ],
+    final canEditPatients = _permissionController.canEdit('Patients');
+    return PermissionScope(
+      controller: _permissionController,
+      child: Scaffold(
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: canEditPatients ? _showQuickAdmissionNotice : null,
+          icon: const Icon(Icons.add_circle_outline),
+          label: const Text('Nouvelle admission'),
+          backgroundColor: const Color(0xFF0EA5A4),
+          foregroundColor: Colors.white,
+        ),
+        body: Row(
+          children: [
+            _buildSidebar(),
+            Expanded(child: _buildMainArea()),
+          ],
+        ),
       ),
     );
   }
@@ -195,10 +230,12 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.healing_rounded,
-                    color: Colors.white,
-                    size: 30,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.asset(
+                      'assets/icon/icon.png',
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -217,8 +254,9 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: ListView.builder(
-                itemCount: _menuItems.length,
+                itemCount: _visibleMenuItems.length,
                 itemBuilder: (context, index) {
+                  final item = _visibleMenuItems[index];
                   return AnimatedBuilder(
                     animation: _fadeAnimation,
                     builder: (context, child) {
@@ -229,7 +267,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
                           child: Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: MenuItemWidget(
-                              item: _menuItems[index],
+                              item: item,
                               isSelected: selectedIndex == index,
                               onTap: () {
                                 setState(() {
@@ -249,6 +287,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
             ),
           ),
           _buildUserProfile(),
+          _buildLogoutButton(),
         ],
       ),
     );
@@ -301,7 +340,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  _menuItems[selectedIndex].title,
+                  _visibleMenuItems.isEmpty ? 'Acces limite' : _visibleMenuItems[selectedIndex].title,
                   style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -315,6 +354,8 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
                 const SizedBox(width: 12),
                 _buildNotificationButton(_notificationService.notifications.isNotEmpty),
               ],
+              const SizedBox(width: 12),
+              _buildLogoutIcon(),
             ],
           );
         },
@@ -463,7 +504,84 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     );
   }
 
+  Widget _buildLogoutIcon() {
+    return GestureDetector(
+      onTap: _confirmLogout,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.12)),
+        ),
+        child: const Icon(Icons.logout_rounded, color: Colors.white, size: 20),
+      ),
+    );
+  }
+
+  Widget _buildLogoutButton() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Deconnexion',
+              style: TextStyle(color: Colors.white.withOpacity(0.85), fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+          ),
+          TextButton(
+            onPressed: _confirmLogout,
+            child: const Text('Confirmer', style: TextStyle(color: Color(0xFFEF4444), fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF111827),
+          title: const Text('Confirmer la deconnexion', style: TextStyle(color: Colors.white)),
+          content: const Text('Voulez-vous vraiment vous deconnecter ?', style: TextStyle(color: Colors.white70)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Annuler', style: TextStyle(color: Colors.white)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await AuthService.logout();
+                if (!mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
+              },
+              child: const Text('Se deconnecter', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildUserProfile() {
+    final user = AuthService.currentUser;
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -490,7 +608,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
                 ),
                 Text(
-                  'admin@reshopital.local',
+                  user?.email ?? '--',
                   style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
                 ),
               ],
@@ -502,7 +620,29 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildContent() {
-    final selectedItem = _menuItems[selectedIndex];
+    if (_loadingPermissions) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation(Color(0xFF0EA5A4)),
+        ),
+      );
+    }
+    if (_visibleMenuItems.isEmpty) {
+      return AccessDeniedScreen(
+        title: 'ce module',
+        onBack: () => setState(() => selectedIndex = 0),
+        onRequestAccess: _requestAccess,
+      );
+    }
+    final selectedItem = _visibleMenuItems[selectedIndex];
+    final module = _moduleKeyForTitle(selectedItem.title);
+    if (!_permissionController.canView(module)) {
+      return AccessDeniedScreen(
+        title: selectedItem.title,
+        onBack: () => setState(() => selectedIndex = 0),
+        onRequestAccess: _requestAccess,
+      );
+    }
     if (selectedItem.title == 'Tableau de bord') {
       return DashboardScreen(fadeAnimation: _fadeAnimation);
     }
@@ -546,5 +686,62 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
       return InterventionsScreen(fadeAnimation: _fadeAnimation);
     }
     return ComingSoonScreen(screenName: selectedItem.title, gradient: selectedItem.gradient);
+  }
+
+  void _requestAccess() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF111827),
+          title: const Text('Demande envoyee', style: TextStyle(color: Colors.white)),
+          content: Text(
+            'Votre demande a ete transmise a un administrateur.',
+            style: TextStyle(color: Colors.white.withOpacity(0.7)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _moduleKeyForTitle(String title) {
+    switch (title) {
+      case 'Tableau de bord':
+        return 'Tableau de bord';
+      case 'Patients':
+        return 'Patients';
+      case 'Personnel medical':
+        return 'Personnel';
+      case 'Chambres & lits':
+        return 'Chambres';
+      case 'Consultations':
+        return 'Consultations';
+      case 'Examens & labo':
+        return 'Examens';
+      case 'Pharmacie & stocks':
+        return 'Pharmacie';
+      case 'Urgences':
+        return 'Urgences';
+      case 'Interventions':
+        return 'Interventions';
+      case 'Facturation':
+        return 'Facturation';
+      case 'Assurances':
+        return 'Assurances';
+      case 'Comptabilite':
+        return 'Comptabilite';
+      case 'Reporting':
+        return 'Reporting';
+      case 'Parametres':
+        return 'Parametres';
+      default:
+        return title;
+    }
   }
 }

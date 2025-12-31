@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/permission_scope.dart';
 
 class ReportingScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
@@ -120,14 +121,22 @@ class _ReportingScreenState extends State<ReportingScreen> with SingleTickerProv
   }
 
   Widget _buildActionsRow() {
+    final canEdit = PermissionScope.of(context).canEdit('Reporting');
+    final canView = PermissionScope.of(context).canView('Reporting');
+    Widget guard(Widget child, bool enabled) {
+      return Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: AbsorbPointer(absorbing: !enabled, child: child),
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
-        _ActionButton(label: 'Exporter PDF', icon: Icons.picture_as_pdf, color: const Color(0xFFEF4444)),
-        _ActionButton(label: 'Export Excel', icon: Icons.grid_on, color: const Color(0xFF22C55E)),
-        _ActionButton(label: 'Planifier', icon: Icons.schedule, color: const Color(0xFF3B82F6)),
-        _ActionButton(label: 'Partager', icon: Icons.share, color: const Color(0xFF64748B)),
+        guard(_ActionButton(label: 'Exporter PDF', icon: Icons.picture_as_pdf, color: const Color(0xFFEF4444)), canView),
+        guard(_ActionButton(label: 'Export Excel', icon: Icons.grid_on, color: const Color(0xFF22C55E)), canView),
+        guard(_ActionButton(label: 'Planifier', icon: Icons.schedule, color: const Color(0xFF3B82F6)), canEdit),
+        guard(_ActionButton(label: 'Partager', icon: Icons.share, color: const Color(0xFF64748B)), canView),
       ],
     );
   }

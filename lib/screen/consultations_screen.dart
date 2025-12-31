@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/permission_scope.dart';
 
 class ConsultationsScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
@@ -136,15 +137,23 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> with SingleTi
   }
 
   Widget _buildActionsRow() {
+    final canEdit = PermissionScope.of(context).canEdit('Consultations');
+    final canView = PermissionScope.of(context).canView('Consultations');
+    Widget guard(Widget child, bool enabled) {
+      return Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: AbsorbPointer(absorbing: !enabled, child: child),
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
-        _ActionButton(label: 'Nouveau RDV', icon: Icons.add_circle_outline, color: const Color(0xFFF59E0B)),
-        _ActionButton(label: 'Exporter', icon: Icons.file_download_outlined, color: const Color(0xFF64748B)),
-        _ActionButton(label: 'Reprogrammer', icon: Icons.event_repeat, color: const Color(0xFF3B82F6)),
-        _ActionButton(label: 'Annuler RDV', icon: Icons.cancel_outlined, color: const Color(0xFFEF4444)),
-        _ActionButton(label: 'Confirmer presence', icon: Icons.check_circle_outline, color: const Color(0xFF22C55E)),
+        guard(_ActionButton(label: 'Nouveau RDV', icon: Icons.add_circle_outline, color: const Color(0xFFF59E0B)), canEdit),
+        guard(_ActionButton(label: 'Exporter', icon: Icons.file_download_outlined, color: const Color(0xFF64748B)), canView),
+        guard(_ActionButton(label: 'Reprogrammer', icon: Icons.event_repeat, color: const Color(0xFF3B82F6)), canEdit),
+        guard(_ActionButton(label: 'Annuler RDV', icon: Icons.cancel_outlined, color: const Color(0xFFEF4444)), canEdit),
+        guard(_ActionButton(label: 'Confirmer presence', icon: Icons.check_circle_outline, color: const Color(0xFF22C55E)), canEdit),
       ],
     );
   }

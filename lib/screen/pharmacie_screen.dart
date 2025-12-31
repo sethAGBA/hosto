@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/permission_scope.dart';
 
 class PharmacieScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
@@ -139,14 +140,22 @@ class _PharmacieScreenState extends State<PharmacieScreen> with SingleTickerProv
   }
 
   Widget _buildActionsRow() {
+    final canEdit = PermissionScope.of(context).canEdit('Pharmacie');
+    final canView = PermissionScope.of(context).canView('Pharmacie');
+    Widget guard(Widget child, bool enabled) {
+      return Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: AbsorbPointer(absorbing: !enabled, child: child),
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
-        _ActionButton(label: 'Nouvelle entree', icon: Icons.add_circle_outline, color: const Color(0xFF10B981)),
-        _ActionButton(label: 'Dispensation', icon: Icons.qr_code_scanner, color: const Color(0xFF3B82F6)),
-        _ActionButton(label: 'Approvisionner', icon: Icons.local_shipping, color: const Color(0xFFF59E0B)),
-        _ActionButton(label: 'Exporter', icon: Icons.file_download_outlined, color: const Color(0xFF64748B)),
+        guard(_ActionButton(label: 'Nouvelle entree', icon: Icons.add_circle_outline, color: const Color(0xFF10B981)), canEdit),
+        guard(_ActionButton(label: 'Dispensation', icon: Icons.qr_code_scanner, color: const Color(0xFF3B82F6)), canEdit),
+        guard(_ActionButton(label: 'Approvisionner', icon: Icons.local_shipping, color: const Color(0xFFF59E0B)), canEdit),
+        guard(_ActionButton(label: 'Exporter', icon: Icons.file_download_outlined, color: const Color(0xFF64748B)), canView),
       ],
     );
   }

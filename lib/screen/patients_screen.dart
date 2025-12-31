@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../models/patient.dart';
+import '../services/database_service.dart';
+import '../widgets/permission_scope.dart';
+
 class PatientsScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
 
@@ -15,75 +19,27 @@ class _PatientsScreenState extends State<PatientsScreen> with SingleTickerProvid
   String _search = '';
   String _filterService = 'Tous';
   String _filterStatus = 'Tous';
+  final DatabaseService _databaseService = DatabaseService();
+  List<Patient> _patients = [];
+  bool _loading = true;
+  Patient? _editingPatient;
+  final Map<String, String?> _fieldErrors = {};
 
-  final List<Map<String, String>> _patients = [
-    {
-      'id': '00142',
-      'name': 'Kofi Amen',
-      'age': '45',
-      'sex': 'M',
-      'status': 'Stable',
-      'room': '305-A',
-      'doctor': 'Dr Ada',
-      'service': 'Medecine interne',
-      'insurance': 'INAM',
-    },
-    {
-      'id': '00143',
-      'name': 'Ama Koffi',
-      'age': '32',
-      'sex': 'F',
-      'status': 'Suivi',
-      'room': '201-B',
-      'doctor': 'Dr Kokou',
-      'service': 'Gynecologie',
-      'insurance': 'CNSS',
-    },
-    {
-      'id': '00144',
-      'name': 'Edem Togo',
-      'age': '67',
-      'sex': 'M',
-      'status': 'Critique',
-      'room': 'USI-03',
-      'doctor': 'Dr Ada',
-      'service': 'Reanimation',
-      'insurance': 'Privée',
-    },
-    {
-      'id': '00145',
-      'name': 'Sena Ablavi',
-      'age': '28',
-      'sex': 'F',
-      'status': 'Externe',
-      'room': 'N/A',
-      'doctor': 'Dr Afi',
-      'service': 'Consultation',
-      'insurance': 'INAM',
-    },
-    {
-      'id': '00146',
-      'name': 'Kwame Mensah',
-      'age': '55',
-      'sex': 'M',
-      'status': 'Stable',
-      'room': '402-C',
-      'doctor': 'Dr Kokou',
-      'service': 'Cardiologie',
-      'insurance': 'CNSS',
-    },
-    {
-      'id': '00147',
-      'name': 'Akossiwa Dzifa',
-      'age': '39',
-      'sex': 'F',
-      'status': 'Suivi',
-      'room': '203-A',
-      'doctor': 'Dr Afi',
-      'service': 'Gynecologie',
-      'insurance': 'Privée',
-    },
-  ];
+  final TextEditingController _dossierController = TextEditingController();
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
+  final TextEditingController _roomController = TextEditingController();
+  final TextEditingController _doctorController = TextEditingController();
+  final TextEditingController _serviceController = TextEditingController();
+  final TextEditingController _insuranceController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _bloodGroupController = TextEditingController();
+  final TextEditingController _allergiesController = TextEditingController();
+  final TextEditingController _emergencyController = TextEditingController();
+  DateTime? _dobValue;
+  String _sexValue = 'M';
+  String _statusValue = 'Stable';
 
   @override
   void initState() {
@@ -94,23 +50,56 @@ class _PatientsScreenState extends State<PatientsScreen> with SingleTickerProvid
     );
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _controller.forward();
+    _loadPatients();
   }
 
   @override
   void dispose() {
+    _dossierController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _roomController.dispose();
+    _doctorController.dispose();
+    _serviceController.dispose();
+    _insuranceController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    _bloodGroupController.dispose();
+    _allergiesController.dispose();
+    _emergencyController.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPatients() async {
+    setState(() => _loading = true);
+    final refreshed = await _databaseService.getPatients();
+    if (!mounted) return;
+    setState(() {
+      _patients = refreshed;
+      _loading = false;
+    });
+  }
+
+  String _ageLabel(int? dateOfBirth) {
+    if (dateOfBirth == null) return '—';
+    final dob = DateTime.fromMillisecondsSinceEpoch(dateOfBirth);
+    final age = (DateTime.now().difference(dob).inDays / 365.25).floor();
+    return age > 0 ? age.toString() : '—';
   }
 
   @override
   Widget build(BuildContext context) {
     final filtered = _patients.where((p) {
+      final fullName = p.fullName.toLowerCase();
+      final dossierNumber = p.dossierNumber.toLowerCase();
+      final doctor = p.doctor.toLowerCase();
       final matchesSearch = _search.isEmpty ||
-          p['name']!.toLowerCase().contains(_search) ||
-          p['id']!.contains(_search) ||
-          p['doctor']!.toLowerCase().contains(_search);
-      final matchesService = _filterService == 'Tous' || p['service'] == _filterService;
-      final matchesStatus = _filterStatus == 'Tous' || p['status'] == _filterStatus;
+          fullName.contains(_search) ||
+          dossierNumber.contains(_search) ||
+          doctor.contains(_search);
+      final matchesService = _filterService == 'Tous' || p.service == _filterService;
+      final matchesStatus = _filterStatus == 'Tous' || p.status == _filterStatus;
       return matchesSearch && matchesService && matchesStatus;
     }).toList();
 
@@ -270,8 +259,8 @@ class _PatientsScreenState extends State<PatientsScreen> with SingleTickerProvid
     final stats = [
       {'label': 'Total patients', 'value': '${_patients.length}', 'icon': Icons.people, 'color': Color(0xFF3B82F6)},
       {'label': 'Affichés', 'value': '$filteredCount', 'icon': Icons.filter_alt, 'color': Color(0xFF0EA5A4)},
-      {'label': 'Critiques', 'value': '${_patients.where((p) => p['status'] == 'Critique').length}', 'icon': Icons.warning_amber_rounded, 'color': Color(0xFFEF4444)},
-      {'label': 'Stables', 'value': '${_patients.where((p) => p['status'] == 'Stable').length}', 'icon': Icons.check_circle, 'color': Color(0xFF22C55E)},
+      {'label': 'Critiques', 'value': '${_patients.where((p) => p.status == 'Critique').length}', 'icon': Icons.warning_amber_rounded, 'color': Color(0xFFEF4444)},
+      {'label': 'Stables', 'value': '${_patients.where((p) => p.status == 'Stable').length}', 'icon': Icons.check_circle, 'color': Color(0xFF22C55E)},
     ];
 
     return LayoutBuilder(
@@ -411,46 +400,674 @@ class _PatientsScreenState extends State<PatientsScreen> with SingleTickerProvid
   }
 
   Widget _buildActionsRow() {
+    final canEdit = PermissionScope.of(context).canEdit('Patients');
+    final canView = PermissionScope.of(context).canView('Patients');
+    Widget guard(Widget child, bool enabled) {
+      return Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: AbsorbPointer(absorbing: !enabled, child: child),
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
-        Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF0EA5A4), Color(0xFF14B8A6)],
-            ),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0EA5A4).withOpacity(0.4),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+        guard(
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0EA5A4), Color(0xFF14B8A6)],
               ),
-            ],
-          ),
-          child: ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.add_circle_outline, size: 20),
-            label: const Text('Nouvelle admission', style: TextStyle(fontWeight: FontWeight.w600)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              foregroundColor: Colors.white,
-              shadowColor: Colors.transparent,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0EA5A4).withOpacity(0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ElevatedButton.icon(
+              onPressed: canEdit ? () => _openAdmissionDialog() : null,
+              icon: const Icon(Icons.add_circle_outline, size: 20),
+              label: const Text('Nouvelle admission', style: TextStyle(fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                shadowColor: Colors.transparent,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
             ),
           ),
+          canEdit,
         ),
-        _ActionChip(label: 'Exporter', icon: Icons.file_download_outlined, onTap: () {}),
-        _ActionChip(label: 'Attestations', icon: Icons.description_outlined, onTap: () {}),
-        _ActionChip(label: 'Transfert', icon: Icons.swap_horiz_rounded, onTap: () {}),
-        _ActionChip(label: 'Imprimer', icon: Icons.print_outlined, onTap: () {}),
+        guard(_ActionChip(label: 'Exporter', icon: Icons.file_download_outlined, onTap: () {}), canView),
+        guard(_ActionChip(label: 'Attestations', icon: Icons.description_outlined, onTap: () {}), canView),
+        guard(_ActionChip(label: 'Transfert', icon: Icons.swap_horiz_rounded, onTap: () {}), canEdit),
+        guard(_ActionChip(label: 'Imprimer', icon: Icons.print_outlined, onTap: () {}), canView),
       ],
     );
   }
 
-  Widget _buildTable(List<Map<String, String>> patients) {
+  Future<void> _openAdmissionDialog({Patient? patient}) async {
+    if (patient == null) {
+      _clearAdmissionForm();
+      _editingPatient = null;
+    } else {
+      _fillAdmissionForm(patient);
+      _editingPatient = patient;
+    }
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final isEditing = _editingPatient != null;
+        return Dialog(
+          backgroundColor: const Color(0xFF0B1220),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640, maxHeight: 760),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(colors: [Color(0xFF0EA5A4), Color(0xFF14B8A6)]),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          isEditing ? 'Modifier patient' : 'Nouvelle admission',
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        _formRow([
+                          _buildField(
+                            'N° dossier',
+                            _dossierController,
+                            fieldKey: 'dossier',
+                            hint: '00148',
+                            required: true,
+                          ),
+                          _buildDateField(),
+                        ]),
+                        const SizedBox(height: 12),
+                        _formRow([
+                          _buildField(
+                            'Prénom',
+                            _firstNameController,
+                            fieldKey: 'firstName',
+                            hint: 'Afi',
+                            required: true,
+                          ),
+                          _buildField(
+                            'Nom',
+                            _lastNameController,
+                            fieldKey: 'lastName',
+                            hint: 'Mensah',
+                            required: true,
+                          ),
+                        ]),
+                        const SizedBox(height: 12),
+                        _formRow([
+                          _buildDropdownField('Sexe', _sexValue, const ['M', 'F'], (value) {
+                            setState(() => _sexValue = value);
+                          }),
+                          _buildDropdownField(
+                            'Statut',
+                            _statusValue,
+                            const ['Stable', 'Suivi', 'Critique', 'Externe'],
+                            (value) => setState(() => _statusValue = value),
+                          ),
+                        ]),
+                        const SizedBox(height: 12),
+                        _formRow([
+                          _buildField(
+                            'Service',
+                            _serviceController,
+                            fieldKey: 'service',
+                            hint: 'Cardiologie',
+                            required: true,
+                          ),
+                          _buildField(
+                            'Médecin',
+                            _doctorController,
+                            fieldKey: 'doctor',
+                            hint: 'Dr Ada',
+                            required: true,
+                          ),
+                        ]),
+                        const SizedBox(height: 12),
+                        _formRow([
+                          _buildField('Chambre', _roomController, hint: '305-A'),
+                          _buildField('Assurance', _insuranceController, hint: 'INAM'),
+                        ]),
+                        const SizedBox(height: 12),
+                        _formRow([
+                          _buildField('Téléphone', _phoneController, hint: '+228 90 00 00 00'),
+                          _buildField('Adresse', _addressController, hint: 'Lomé'),
+                        ]),
+                        const SizedBox(height: 12),
+                        _formRow([
+                          _buildField('Groupe sanguin', _bloodGroupController, hint: 'O+'),
+                          _buildField('Allergies', _allergiesController, hint: 'Aucune'),
+                        ]),
+                        const SizedBox(height: 12),
+                        _buildField('Contact urgence', _emergencyController, hint: 'Famille / Tuteur'),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+                    border: Border(top: BorderSide(color: Colors.white.withOpacity(0.08))),
+                  ),
+                  child: Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: TextButton.styleFrom(foregroundColor: Colors.white70),
+                        child: const Text('Annuler'),
+                      ),
+                      const Spacer(),
+                      ElevatedButton.icon(
+                        onPressed: _saveAdmission,
+                        icon: const Icon(Icons.save),
+                        label: Text(isEditing ? 'Enregistrer' : 'Créer'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0EA5A4),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _formRow(List<Widget> fields) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 520;
+        if (isCompact) {
+          return Column(
+            children: [
+              for (int i = 0; i < fields.length; i++) ...[
+                fields[i],
+                if (i != fields.length - 1) const SizedBox(height: 12),
+              ],
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            for (int i = 0; i < fields.length; i++) ...[
+              Expanded(child: fields[i]),
+              if (i != fields.length - 1) const SizedBox(width: 12),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildField(
+    String label,
+    TextEditingController controller, {
+    String? hint,
+    bool required = false,
+    String? fieldKey,
+  }) {
+    final errorText = fieldKey == null ? null : _fieldErrors[fieldKey];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel(label, required),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          onChanged: fieldKey == null
+              ? null
+              : (_) {
+                  if (_fieldErrors[fieldKey] != null) {
+                    setState(() => _fieldErrors[fieldKey] = null);
+                  }
+                },
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: Colors.white.withOpacity(0.35)),
+            filled: true,
+            fillColor: const Color(0xFF111827),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF0EA5A4), width: 1.5),
+            ),
+            errorText: errorText,
+            errorStyle: const TextStyle(color: Color(0xFFEF4444), fontSize: 11),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDropdownField(String label, String value, List<String> options, ValueChanged<String> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel(label, false),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111827),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              dropdownColor: const Color(0xFF0F172A),
+              icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF0EA5A4)),
+              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+              items: options
+                  .map((option) => DropdownMenuItem(
+                        value: option,
+                        child: Text(option),
+                      ))
+                  .toList(),
+              onChanged: (val) => onChanged(val ?? value),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDateField() {
+    final label = _dobValue == null
+        ? 'Date de naissance'
+        : '${_dobValue!.day.toString().padLeft(2, '0')}/${_dobValue!.month.toString().padLeft(2, '0')}/${_dobValue!.year}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('Date de naissance', false),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: _pickBirthDate,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111827),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today_outlined, color: Color(0xFF0EA5A4), size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(color: _dobValue == null ? Colors.white.withOpacity(0.4) : Colors.white, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickBirthDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dobValue ?? DateTime(now.year - 30),
+      firstDate: DateTime(1920),
+      lastDate: now,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF0EA5A4),
+              surface: Color(0xFF0B1220),
+              onSurface: Colors.white,
+            ),
+            dialogBackgroundColor: const Color(0xFF0B1220),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _dobValue = picked);
+    }
+  }
+
+  Widget _buildLabel(String label, bool required) {
+    if (!required) {
+      return Text(
+        label,
+        style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12, fontWeight: FontWeight.w600),
+      );
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12, fontWeight: FontWeight.w600),
+        children: [
+          TextSpan(text: label),
+          const TextSpan(text: ' *', style: TextStyle(color: Color(0xFFEF4444))),
+        ],
+      ),
+    );
+  }
+
+  void _clearAdmissionForm() {
+    _fieldErrors.clear();
+    _dossierController.clear();
+    _firstNameController.clear();
+    _lastNameController.clear();
+    _roomController.clear();
+    _doctorController.clear();
+    _serviceController.clear();
+    _insuranceController.clear();
+    _phoneController.clear();
+    _addressController.clear();
+    _bloodGroupController.clear();
+    _allergiesController.clear();
+    _emergencyController.clear();
+    _dobValue = null;
+    _sexValue = 'M';
+    _statusValue = 'Stable';
+  }
+
+  void _fillAdmissionForm(Patient patient) {
+    _dossierController.text = patient.dossierNumber;
+    _firstNameController.text = patient.firstName;
+    _lastNameController.text = patient.lastName;
+    _roomController.text = patient.room;
+    _doctorController.text = patient.doctor;
+    _serviceController.text = patient.service;
+    _insuranceController.text = patient.insurance;
+    _phoneController.text = patient.phone;
+    _addressController.text = patient.address;
+    _bloodGroupController.text = patient.bloodGroup;
+    _allergiesController.text = patient.allergies;
+    _emergencyController.text = patient.emergencyContact;
+    _dobValue = patient.dateOfBirth != null ? DateTime.fromMillisecondsSinceEpoch(patient.dateOfBirth!) : null;
+    _sexValue = patient.sex.isEmpty ? 'M' : patient.sex;
+    _statusValue = patient.status.isEmpty ? 'Stable' : patient.status;
+  }
+
+  Future<void> _saveAdmission() async {
+    final dossier = _dossierController.text.trim();
+    final firstName = _firstNameController.text.trim();
+    final lastName = _lastNameController.text.trim();
+    final service = _serviceController.text.trim();
+    final doctor = _doctorController.text.trim();
+    final room = _roomController.text.trim();
+    final insurance = _insuranceController.text.trim();
+
+    _fieldErrors['dossier'] = dossier.isEmpty ? 'Champ obligatoire' : null;
+    _fieldErrors['firstName'] = firstName.isEmpty ? 'Champ obligatoire' : null;
+    _fieldErrors['lastName'] = lastName.isEmpty ? 'Champ obligatoire' : null;
+    _fieldErrors['service'] = service.isEmpty ? 'Champ obligatoire' : null;
+    _fieldErrors['doctor'] = doctor.isEmpty ? 'Champ obligatoire' : null;
+
+    if (_fieldErrors.values.any((error) => error != null)) {
+      setState(() {});
+      return;
+    }
+
+    final now = DateTime.now();
+    final patient = Patient(
+      id: _editingPatient?.id ?? 'pat_${now.millisecondsSinceEpoch}',
+      dossierNumber: dossier,
+      firstName: firstName,
+      lastName: lastName,
+      dateOfBirth: _dobValue?.millisecondsSinceEpoch,
+      sex: _sexValue,
+      phone: _phoneController.text.trim(),
+      address: _addressController.text.trim(),
+      bloodGroup: _bloodGroupController.text.trim(),
+      allergies: _allergiesController.text.trim(),
+      emergencyContact: _emergencyController.text.trim(),
+      status: _statusValue,
+      room: room,
+      doctor: doctor,
+      service: service,
+      insurance: insurance,
+      createdAt: _editingPatient?.createdAt ?? now.millisecondsSinceEpoch,
+      updatedAt: now.millisecondsSinceEpoch,
+    );
+
+    final wasEditing = _editingPatient != null;
+    if (_editingPatient == null) {
+      await _databaseService.insertPatient(patient);
+    } else {
+      await _databaseService.updatePatient(patient);
+    }
+    if (!mounted) return;
+    _editingPatient = null;
+    Navigator.of(context).pop();
+    _loadPatients();
+    await _showStatusDialog(
+      title: wasEditing ? 'Patient mis à jour' : 'Patient ajouté',
+      message: wasEditing
+          ? 'Les informations du patient ont été mises à jour.'
+          : 'Le patient a été enregistré avec succès.',
+    );
+  }
+
+  
+
+  Future<void> _openPatientDetails(Patient patient) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: const Color(0xFF0B1220),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(colors: [Color(0xFF0EA5A4), Color(0xFF14B8A6)]),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person_search_rounded, color: Colors.white),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Dossier patient',
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        patient.fullName,
+                        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Dossier #${patient.dossierNumber}',
+                        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
+                      ),
+                      const SizedBox(height: 16),
+                      _detailRow('Statut', patient.status),
+                      _detailRow('Service', patient.service),
+                      _detailRow('Médecin', patient.doctor),
+                      _detailRow('Chambre', patient.room),
+                      _detailRow('Assurance', patient.insurance),
+                      _detailRow('Téléphone', patient.phone),
+                      _detailRow('Adresse', patient.address),
+                      _detailRow('Groupe sanguin', patient.bloodGroup),
+                      _detailRow('Allergies', patient.allergies),
+                      _detailRow('Contact urgence', patient.emergencyContact),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+                    border: Border(top: BorderSide(color: Colors.white.withOpacity(0.08))),
+                  ),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: TextButton.styleFrom(foregroundColor: Colors.white70),
+                        child: const Text('Fermer'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '—' : value,
+              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDeletePatient(Patient patient) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0B1220),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Supprimer le patient', style: TextStyle(color: Colors.white)),
+          content: Text(
+            'Confirmer la suppression de ${patient.fullName} ?',
+            style: TextStyle(color: Colors.white.withOpacity(0.7)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Annuler', style: TextStyle(color: Colors.white70)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Supprimer', style: TextStyle(color: Color(0xFFEF4444))),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _databaseService.deletePatient(patient.id);
+      if (!mounted) return;
+      _loadPatients();
+      await _showStatusDialog(
+        title: 'Patient supprimé',
+        message: 'Le dossier a été supprimé avec succès.',
+      );
+    }
+  }
+
+  Future<void> _showStatusDialog({required String title, required String message}) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0B1220),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(title, style: const TextStyle(color: Colors.white)),
+          content: Text(
+            message,
+            style: TextStyle(color: Colors.white.withOpacity(0.7)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK', style: TextStyle(color: Color(0xFF0EA5A4))),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTable(List<Patient> patients) {
     final content = Column(
       children: [
         Container(
@@ -465,11 +1082,36 @@ class _PatientsScreenState extends State<PatientsScreen> with SingleTickerProvid
           child: _TableHeaderRow(),
         ),
         Expanded(
-          child: patients.isEmpty
+          child: _loading
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      const SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          valueColor: AlwaysStoppedAnimation(Color(0xFF0EA5A4)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Chargement des patients...',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : patients.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
                       Icon(Icons.search_off_rounded, size: 64, color: Colors.white.withOpacity(0.3)),
                       const SizedBox(height: 16),
                       Text(
@@ -490,40 +1132,46 @@ class _PatientsScreenState extends State<PatientsScreen> with SingleTickerProvid
                       ),
                     ],
                   ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(20),
-                  itemCount: patients.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final patient = patients[index];
-                    return TweenAnimationBuilder<double>(
-                      duration: Duration(milliseconds: 300 + (index * 50)),
-                      tween: Tween(begin: 0.0, end: 1.0),
-                      curve: Curves.easeOut,
-                      builder: (context, value, child) {
-                        return Transform.translate(
-                          offset: Offset(0, 20 * (1 - value)),
-                          child: Opacity(
-                            opacity: value,
-                            child: child,
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(20),
+                      itemCount: patients.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final patient = patients[index];
+                        return TweenAnimationBuilder<double>(
+                          duration: Duration(milliseconds: 300 + (index * 50)),
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          curve: Curves.easeOut,
+                          builder: (context, value, child) {
+                            return Transform.translate(
+                              offset: Offset(0, 20 * (1 - value)),
+                              child: Opacity(
+                                opacity: value,
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: _PatientRow(
+                            patientId: patient.id,
+                            dossierNumber: patient.dossierNumber,
+                            name: patient.fullName,
+                            age: _ageLabel(patient.dateOfBirth),
+                            sex: patient.sex,
+                            status: patient.status,
+                            room: patient.room,
+                            doctor: patient.doctor,
+                            service: patient.service,
+                            insurance: patient.insurance,
+                            canEdit: PermissionScope.of(context).canEdit('Patients'),
+                            canDelete: PermissionScope.of(context).canDelete('Patients'),
+                            onView: () => _openPatientDetails(patient),
+                            onEdit: () => _openAdmissionDialog(patient: patient),
+                            onDelete: () => _confirmDeletePatient(patient),
                           ),
                         );
                       },
-                      child: _PatientRow(
-                        id: patient['id']!,
-                        name: patient['name']!,
-                        age: patient['age']!,
-                        sex: patient['sex']!,
-                        status: patient['status']!,
-                        room: patient['room']!,
-                        doctor: patient['doctor']!,
-                        service: patient['service']!,
-                        insurance: patient['insurance']!,
-                      ),
-                    );
-                  },
-                ),
+                    ),
         ),
         Container(
           padding: const EdgeInsets.all(20),
@@ -659,7 +1307,8 @@ class _HeaderCell extends StatelessWidget {
 }
 
 class _PatientRow extends StatefulWidget {
-  final String id;
+  final String patientId;
+  final String dossierNumber;
   final String name;
   final String age;
   final String sex;
@@ -668,9 +1317,15 @@ class _PatientRow extends StatefulWidget {
   final String doctor;
   final String service;
   final String insurance;
+  final bool canEdit;
+  final bool canDelete;
+  final VoidCallback onView;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _PatientRow({
-    required this.id,
+    required this.patientId,
+    required this.dossierNumber,
     required this.name,
     required this.age,
     required this.sex,
@@ -679,6 +1334,11 @@ class _PatientRow extends StatefulWidget {
     required this.doctor,
     required this.service,
     required this.insurance,
+    required this.canEdit,
+    required this.canDelete,
+    required this.onView,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -762,12 +1422,12 @@ class _PatientRowState extends State<_PatientRow> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: const Color(0xFF0EA5A4).withOpacity(0.2)),
                 ),
-                child: Text(
-                  '#${widget.id}',
-                  style: const TextStyle(
-                    color: Color(0xFF0EA5A4),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+                  child: Text(
+                    '#${widget.dossierNumber}',
+                    style: const TextStyle(
+                      color: Color(0xFF0EA5A4),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -949,14 +1609,31 @@ class _PatientRowState extends State<_PatientRow> {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerRight,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    _IconButton(icon: Icons.visibility_outlined, color: const Color(0xFF0EA5A4), tooltip: 'Voir'),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                    _IconButton(
+                      icon: Icons.visibility_outlined,
+                      color: const Color(0xFF0EA5A4),
+                      tooltip: 'Voir',
+                      onTap: widget.onView,
+                    ),
                     const SizedBox(width: 6),
-                    _IconButton(icon: Icons.edit_outlined, color: const Color(0xFF3B82F6), tooltip: 'Modifier'),
+                    _IconButton(
+                      icon: Icons.edit_outlined,
+                      color: const Color(0xFF3B82F6),
+                      tooltip: 'Modifier',
+                      onTap: widget.canEdit ? widget.onEdit : null,
+                      enabled: widget.canEdit,
+                    ),
                     const SizedBox(width: 6),
-                    _IconButton(icon: Icons.more_vert, color: Colors.white70, tooltip: 'Plus'),
+                    _IconButton(
+                      icon: Icons.delete_outline,
+                      color: const Color(0xFFEF4444),
+                      tooltip: 'Supprimer',
+                      onTap: widget.canDelete ? widget.onDelete : null,
+                      enabled: widget.canDelete,
+                    ),
                   ],
                 ),
               ),
@@ -987,8 +1664,16 @@ class _IconButton extends StatefulWidget {
   final IconData icon;
   final Color color;
   final String tooltip;
+  final VoidCallback? onTap;
+  final bool enabled;
 
-  const _IconButton({required this.icon, required this.color, required this.tooltip});
+  const _IconButton({
+    required this.icon,
+    required this.color,
+    required this.tooltip,
+    this.onTap,
+    this.enabled = true,
+  });
 
   @override
   State<_IconButton> createState() => _IconButtonState();
@@ -1009,14 +1694,20 @@ class _IconButtonState extends State<_IconButton> {
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: _hovered ? widget.color.withOpacity(0.2) : widget.color.withOpacity(0.1),
+            color: _hovered && widget.enabled ? widget.color.withOpacity(0.2) : widget.color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: _hovered ? widget.color.withOpacity(0.5) : widget.color.withOpacity(0.25),
-              width: _hovered ? 2 : 1,
+              color: _hovered && widget.enabled ? widget.color.withOpacity(0.5) : widget.color.withOpacity(0.25),
+              width: _hovered && widget.enabled ? 2 : 1,
             ),
           ),
-          child: Icon(widget.icon, color: widget.color, size: 16),
+          child: GestureDetector(
+            onTap: widget.enabled ? widget.onTap : null,
+            child: Opacity(
+              opacity: widget.enabled ? 1 : 0.4,
+              child: Icon(widget.icon, color: widget.color, size: 16),
+            ),
+          ),
         ),
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/permission_scope.dart';
 
 class InterventionsScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
@@ -133,14 +134,22 @@ class _InterventionsScreenState extends State<InterventionsScreen> with SingleTi
   }
 
   Widget _buildActionsRow() {
+    final canEdit = PermissionScope.of(context).canEdit('Interventions');
+    final canView = PermissionScope.of(context).canView('Interventions');
+    Widget guard(Widget child, bool enabled) {
+      return Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: AbsorbPointer(absorbing: !enabled, child: child),
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
-        _ActionButton(label: 'Programmer', icon: Icons.calendar_month, color: const Color(0xFF8B5CF6)),
-        _ActionButton(label: 'Checklist', icon: Icons.fact_check, color: const Color(0xFF22C55E)),
-        _ActionButton(label: 'Equipe', icon: Icons.groups, color: const Color(0xFFF59E0B)),
-        _ActionButton(label: 'Materiel', icon: Icons.handyman, color: const Color(0xFF3B82F6)),
+        guard(_ActionButton(label: 'Programmer', icon: Icons.calendar_month, color: const Color(0xFF8B5CF6)), canEdit),
+        guard(_ActionButton(label: 'Checklist', icon: Icons.fact_check, color: const Color(0xFF22C55E)), canEdit),
+        guard(_ActionButton(label: 'Equipe', icon: Icons.groups, color: const Color(0xFFF59E0B)), canEdit),
+        guard(_ActionButton(label: 'Materiel', icon: Icons.handyman, color: const Color(0xFF3B82F6)), canEdit),
       ],
     );
   }

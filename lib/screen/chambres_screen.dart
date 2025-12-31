@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/permission_scope.dart';
 
 class ChambresScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
@@ -209,15 +210,23 @@ class _ChambresScreenState extends State<ChambresScreen> with SingleTickerProvid
   }
 
   Widget _buildActionsRow() {
+    final canEdit = PermissionScope.of(context).canEdit('Chambres');
+    final canView = PermissionScope.of(context).canView('Chambres');
+    Widget guard(Widget child, bool enabled) {
+      return Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: AbsorbPointer(absorbing: !enabled, child: child),
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
-        _ActionButton(label: 'Affecter patient', icon: Icons.person_add_alt_1, color: const Color(0xFF6366F1)),
-        _ActionButton(label: 'Marquer nettoyage', icon: Icons.cleaning_services, color: const Color(0xFFF59E0B)),
-        _ActionButton(label: 'Liberer chambre', icon: Icons.logout_rounded, color: const Color(0xFF22C55E)),
-        _ActionButton(label: 'Programmer entretien', icon: Icons.build_circle, color: const Color(0xFF6366F1)),
-        _ActionButton(label: 'Historique mouvements', icon: Icons.history, color: const Color(0xFF3B82F6)),
+        guard(_ActionButton(label: 'Affecter patient', icon: Icons.person_add_alt_1, color: const Color(0xFF6366F1)), canEdit),
+        guard(_ActionButton(label: 'Marquer nettoyage', icon: Icons.cleaning_services, color: const Color(0xFFF59E0B)), canEdit),
+        guard(_ActionButton(label: 'Liberer chambre', icon: Icons.logout_rounded, color: const Color(0xFF22C55E)), canEdit),
+        guard(_ActionButton(label: 'Programmer entretien', icon: Icons.build_circle, color: const Color(0xFF6366F1)), canEdit),
+        guard(_ActionButton(label: 'Historique mouvements', icon: Icons.history, color: const Color(0xFF3B82F6)), canView),
       ],
     );
   }

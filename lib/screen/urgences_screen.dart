@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/permission_scope.dart';
 
 class UrgencesScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
@@ -191,13 +192,21 @@ class _UrgencesScreenState extends State<UrgencesScreen> with SingleTickerProvid
   }
 
   Widget _buildActionsRow() {
+    final canEdit = PermissionScope.of(context).canEdit('Urgences');
+    final canView = PermissionScope.of(context).canView('Urgences');
+    Widget guard(Widget child, bool enabled) {
+      return Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: AbsorbPointer(absorbing: !enabled, child: child),
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
-        _ActionButton(label: 'Nouvel arrivant', icon: Icons.add_circle_outline, color: const Color(0xFFEF4444)),
-        _ActionButton(label: 'Appeler suivant', icon: Icons.campaign_outlined, color: const Color(0xFF0EA5A4)),
-        _ActionButton(label: 'Exporter', icon: Icons.file_download_outlined, color: const Color(0xFF64748B)),
+        guard(_ActionButton(label: 'Nouvel arrivant', icon: Icons.add_circle_outline, color: const Color(0xFFEF4444)), canEdit),
+        guard(_ActionButton(label: 'Appeler suivant', icon: Icons.campaign_outlined, color: const Color(0xFF0EA5A4)), canEdit),
+        guard(_ActionButton(label: 'Exporter', icon: Icons.file_download_outlined, color: const Color(0xFF64748B)), canView),
       ],
     );
   }

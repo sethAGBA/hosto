@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/permission_scope.dart';
 
 class FacturationScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
@@ -133,14 +134,22 @@ class _FacturationScreenState extends State<FacturationScreen> with SingleTicker
   }
 
   Widget _buildActionsRow() {
+    final canEdit = PermissionScope.of(context).canEdit('Facturation');
+    final canView = PermissionScope.of(context).canView('Facturation');
+    Widget guard(Widget child, bool enabled) {
+      return Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: AbsorbPointer(absorbing: !enabled, child: child),
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
-        _ActionButton(label: 'Nouvelle facture', icon: Icons.add_circle_outline, color: const Color(0xFFF97316)),
-        _ActionButton(label: 'Encaisser', icon: Icons.payments_outlined, color: const Color(0xFF22C55E)),
-        _ActionButton(label: 'Teletransmettre', icon: Icons.send_outlined, color: const Color(0xFF3B82F6)),
-        _ActionButton(label: 'Exporter', icon: Icons.file_download_outlined, color: const Color(0xFF64748B)),
+        guard(_ActionButton(label: 'Nouvelle facture', icon: Icons.add_circle_outline, color: const Color(0xFFF97316)), canEdit),
+        guard(_ActionButton(label: 'Encaisser', icon: Icons.payments_outlined, color: const Color(0xFF22C55E)), canEdit),
+        guard(_ActionButton(label: 'Teletransmettre', icon: Icons.send_outlined, color: const Color(0xFF3B82F6)), canEdit),
+        guard(_ActionButton(label: 'Exporter', icon: Icons.file_download_outlined, color: const Color(0xFF64748B)), canView),
       ],
     );
   }

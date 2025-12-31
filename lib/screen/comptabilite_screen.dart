@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/permission_scope.dart';
 
 class ComptabiliteScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
@@ -127,14 +128,22 @@ class _ComptabiliteScreenState extends State<ComptabiliteScreen> with SingleTick
   }
 
   Widget _buildActionsRow() {
+    final canEdit = PermissionScope.of(context).canEdit('Comptabilite');
+    final canView = PermissionScope.of(context).canView('Comptabilite');
+    Widget guard(Widget child, bool enabled) {
+      return Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: AbsorbPointer(absorbing: !enabled, child: child),
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
-        _ActionButton(label: 'Nouvelle ecriture', icon: Icons.post_add, color: const Color(0xFF3B82F6)),
-        _ActionButton(label: 'Exporter', icon: Icons.file_download_outlined, color: const Color(0xFF64748B)),
-        _ActionButton(label: 'Valider', icon: Icons.verified_outlined, color: const Color(0xFF22C55E)),
-        _ActionButton(label: 'Lettrage', icon: Icons.link, color: const Color(0xFFF59E0B)),
+        guard(_ActionButton(label: 'Nouvelle ecriture', icon: Icons.post_add, color: const Color(0xFF3B82F6)), canEdit),
+        guard(_ActionButton(label: 'Exporter', icon: Icons.file_download_outlined, color: const Color(0xFF64748B)), canView),
+        guard(_ActionButton(label: 'Valider', icon: Icons.verified_outlined, color: const Color(0xFF22C55E)), canEdit),
+        guard(_ActionButton(label: 'Lettrage', icon: Icons.link, color: const Color(0xFFF59E0B)), canEdit),
       ],
     );
   }

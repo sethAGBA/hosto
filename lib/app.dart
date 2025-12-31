@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'screen/main_screen.dart';
 
 class ResHopitalApp extends StatelessWidget {
-  const ResHopitalApp({super.key});
+  final Widget? initialScreen;
+
+  const ResHopitalApp({super.key, this.initialScreen});
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +19,7 @@ class ResHopitalApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF0F172A),
         cardColor: const Color(0xFF111827),
       ),
-      home: const MainScreen(),
+      home: initialScreen ?? const MainScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
