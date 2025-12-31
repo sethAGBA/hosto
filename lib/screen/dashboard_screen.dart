@@ -1,15 +1,71 @@
 import 'package:flutter/material.dart';
-// import 'dart:math' as math;
+import '../models/bed.dart';
+import '../models/consultation.dart';
+import '../models/emergency_visit.dart';
+import '../models/patient.dart';
+import '../models/medical_staff.dart';
+import '../services/database_service.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
 
   const DashboardScreen({super.key, required this.fadeAnimation});
 
   @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  final DatabaseService _databaseService = DatabaseService();
+  bool _loading = true;
+
+  List<Patient> _patients = [];
+  List<Consultation> _consultations = [];
+  List<EmergencyVisit> _emergencies = [];
+  List<Bed> _beds = [];
+  List<MedicalStaff> _staff = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardData();
+  }
+
+  Future<void> _loadDashboardData() async {
+    setState(() => _loading = true);
+    final patients = await _databaseService.getPatients();
+    final consultations = await _databaseService.getConsultations();
+    final emergencies = await _databaseService.getEmergencyVisits();
+    final beds = await _databaseService.getBeds();
+    final staff = await _databaseService.getPersonnel();
+    if (!mounted) return;
+    setState(() {
+      _patients = patients;
+      _consultations = consultations;
+      _emergencies = emergencies;
+      _beds = beds;
+      _staff = staff;
+      _loading = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final hospitalized = _patients.where((p) => p.room.trim().isNotEmpty).length;
+    final consultationsPending = _consultations.where((c) => c.status == 'En attente').length;
+    final urgencesWaiting = _emergencies.where((e) => e.status == 'En attente').length;
+    final urgencesCritical = _emergencies.where((e) => e.priority == 'Rouge').length;
+    final bedsTotal = _beds.length;
+    final bedsFree = _beds.where((b) => b.status == 'Libre').length;
+    final bedsOccupied = _beds.where((b) => b.status == 'Occupe').length;
+    final occupancy = bedsTotal == 0 ? 0 : ((bedsOccupied / bedsTotal) * 100).round();
+
+    final dashboardAlerts = _buildAlerts();
+    final performanceItems = _buildPerformanceItems();
+    final agendaItems = _buildAgendaItems();
+
     return FadeTransition(
-      opacity: fadeAnimation,
+      opacity: widget.fadeAnimation,
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(
@@ -20,11 +76,11 @@ class DashboardScreen extends StatelessWidget {
             Wrap(
               spacing: 16,
               runSpacing: 16,
-              children: const [
+              children: [
                 _KpiCard(
                   title: 'Patients hospitalisés',
-                  value: '142',
-                  subtitle: '+6 vs hier',
+                  value: _loading ? '--' : '$hospitalized',
+                  subtitle: _loading ? 'Chargement...' : '${_patients.length} dossiers',
                   trend: 4.4,
                   icon: Icons.people_alt_rounded,
                   color: Color(0xFF3B82F6),
@@ -32,8 +88,8 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 _KpiCard(
                   title: 'Consultations',
-                  value: '87',
-                  subtitle: '25 en attente',
+                  value: _loading ? '--' : '${_consultations.length}',
+                  subtitle: _loading ? 'Chargement...' : '$consultationsPending en attente',
                   trend: 12.5,
                   icon: Icons.event_available_rounded,
                   color: Color(0xFF10B981),
@@ -41,8 +97,8 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 _KpiCard(
                   title: 'Urgences',
-                  value: '12',
-                  subtitle: '3 critiques',
+                  value: _loading ? '--' : '$urgencesWaiting',
+                  subtitle: _loading ? 'Chargement...' : '$urgencesCritical critiques',
                   trend: -8.3,
                   icon: Icons.warning_amber_rounded,
                   color: Color(0xFFEF4444),
@@ -50,8 +106,8 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 _KpiCard(
                   title: 'Disponibilité lits',
-                  value: '23/180',
-                  subtitle: 'Occupation 78%',
+                  value: _loading ? '--/--' : '$bedsFree/$bedsTotal',
+                  subtitle: _loading ? 'Chargement...' : 'Occupation $occupancy%',
                   trend: 0.0,
                   icon: Icons.bed_rounded,
                   color: Color(0xFF8B5CF6),
@@ -71,12 +127,12 @@ class DashboardScreen extends StatelessWidget {
                   children: [
                     _ChartCard(
                       title: 'Admissions sur 30 jours',
-                      subtitle: 'Tendance stable',
+                      subtitle: _loading ? 'Chargement...' : '${_patients.length} admissions recentes',
                       width: isWide ? (constraints.maxWidth - 16) / 2 : constraints.maxWidth,
                     ),
                     _ChartCard(
                       title: 'Occupation par service',
-                      subtitle: 'Médecine interne en tension',
+                      subtitle: _loading ? 'Chargement...' : 'Occupation globale $occupancy%',
                       width: isWide ? (constraints.maxWidth - 16) / 2 : constraints.maxWidth,
                     ),
                   ],
@@ -96,17 +152,17 @@ class DashboardScreen extends StatelessWidget {
                     _InfoCard(
                       title: 'Alertes critiques',
                       width: isWide ? (constraints.maxWidth - 32) / 3 : constraints.maxWidth,
-                      child: const _AlertList(),
+                      child: _AlertList(alerts: dashboardAlerts),
                     ),
                     _InfoCard(
                       title: 'Indicateurs de performance',
                       width: isWide ? (constraints.maxWidth - 32) / 3 : constraints.maxWidth,
-                      child: const _PerformanceList(),
+                      child: _PerformanceList(items: performanceItems),
                     ),
                     _InfoCard(
                       title: 'Agenda du jour',
                       width: isWide ? (constraints.maxWidth - 32) / 3 : constraints.maxWidth,
-                      child: const _AgendaList(),
+                      child: _AgendaList(items: agendaItems),
                     ),
                   ],
                 );
@@ -117,6 +173,128 @@ class DashboardScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  List<_AlertItem> _buildAlerts() {
+    final criticalPatients = _patients.where((p) => p.status == 'Critique').length;
+    final urgencesRouge = _emergencies.where((e) => e.priority == 'Rouge').length;
+    final bedsFree = _beds.where((b) => b.status == 'Libre').length;
+    final staffCount = _staff.length;
+
+    final alerts = <_AlertItem>[
+      _AlertItem(
+        label: '$criticalPatients patients en etat critique',
+        icon: Icons.emergency,
+        color: const Color(0xFFEF4444),
+      ),
+      _AlertItem(
+        label: '$urgencesRouge urgences rouge en attente',
+        icon: Icons.warning_amber_rounded,
+        color: const Color(0xFFF59E0B),
+      ),
+      _AlertItem(
+        label: 'Lits libres: $bedsFree',
+        icon: Icons.bed_outlined,
+        color: const Color(0xFF8B5CF6),
+      ),
+      _AlertItem(
+        label: 'Personnel dispo: $staffCount',
+        icon: Icons.group_outlined,
+        color: const Color(0xFF22C55E),
+      ),
+    ];
+    return alerts;
+  }
+
+  List<_PerformanceItemData> _buildPerformanceItems() {
+    final waiting = _emergencies.where((e) => e.status == 'En attente').toList();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final waits = waiting
+        .map((v) => ((now - v.arrivalAt) / 60000).round())
+        .where((m) => m >= 0)
+        .toList();
+    final avgWait = waits.isEmpty ? 0 : (waits.reduce((a, b) => a + b) / waits.length).round();
+    final occupied = _beds.where((b) => b.status == 'Occupe').length;
+    final totalBeds = _beds.length;
+    final occupancy = totalBeds == 0 ? 0 : (occupied / totalBeds);
+
+    final patientsCount = _patients.length;
+    final staffCount = _staff.isEmpty ? 0 : _staff.length;
+    final ratioValue = staffCount == 0 ? 0 : (patientsCount / staffCount);
+    final ratioLabel = staffCount == 0 || ratioValue == 0 ? '--' : '1/${ratioValue.round()}';
+
+    final consultationsDone = _consultations.where((c) => c.status == 'Termine').length;
+    final consultationsRate = _consultations.isEmpty ? 0 : consultationsDone / _consultations.length;
+
+    return [
+      _PerformanceItemData(
+        label: 'Temps attente moyen',
+        value: '${avgWait} min',
+        progress: (avgWait / 60).clamp(0.0, 1.0),
+        color: const Color(0xFF0EA5A4),
+      ),
+      _PerformanceItemData(
+        label: 'Taux occupation',
+        value: '${(occupancy * 100).round()}%',
+        progress: occupancy.clamp(0.0, 1.0).toDouble(),
+        color: const Color(0xFFF59E0B),
+      ),
+      _PerformanceItemData(
+        label: 'Ratio personnel/patients',
+        value: ratioLabel,
+        progress: staffCount == 0 || ratioValue == 0 ? 0.1 : (1 / ratioValue).clamp(0.05, 1.0),
+        color: const Color(0xFF3B82F6),
+      ),
+      _PerformanceItemData(
+        label: 'Consultations terminees',
+        value: '${(consultationsRate * 100).round()}%',
+        progress: consultationsRate.clamp(0.0, 1.0).toDouble(),
+        color: const Color(0xFF22C55E),
+      ),
+    ];
+  }
+
+  List<_AgendaEntry> _buildAgendaItems() {
+    final now = DateTime.now();
+    final upcoming = _consultations
+        .where((c) => c.scheduledAt > 0)
+        .toList()
+      ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+    final items = <_AgendaEntry>[];
+    for (final consultation in upcoming) {
+      final date = DateTime.fromMillisecondsSinceEpoch(consultation.scheduledAt);
+      if (date.day != now.day || date.month != now.month || date.year != now.year) {
+        continue;
+      }
+      items.add(
+        _AgendaEntry(
+          time: _formatTime(consultation.scheduledAt),
+          title: consultation.patientName.isEmpty ? consultation.reason : consultation.patientName,
+          location: consultation.location.isEmpty ? 'Consultation' : consultation.location,
+          status: consultation.status == 'En cours' ? 'En cours' : 'A venir',
+        ),
+      );
+      if (items.length == 4) break;
+    }
+    if (items.isEmpty) {
+      return [
+        const _AgendaEntry(
+          time: '--:--',
+          title: 'Aucun rendez-vous',
+          location: 'Journee libre',
+          status: 'A venir',
+        ),
+      ];
+    }
+    return items;
+  }
+
+  String _formatTime(int epoch) {
+    if (epoch == 0) return '--:--';
+    final date = DateTime.fromMillisecondsSinceEpoch(epoch);
+    final h = date.hour.toString().padLeft(2, '0');
+    final m = date.minute.toString().padLeft(2, '0');
+    return '$h:$m';
   }
 
   Widget _buildSectionTitle(String title) {
@@ -628,16 +806,18 @@ class _InfoCard extends StatelessWidget {
 }
 
 class _AlertList extends StatelessWidget {
-  const _AlertList();
+  final List<_AlertItem> alerts;
+
+  const _AlertList({required this.alerts});
 
   @override
   Widget build(BuildContext context) {
-    final alerts = [
-      ('3 patients en état critique', Icons.emergency, Color(0xFFEF4444)),
-      ('Stock antibiotiques faible', Icons.medication, Color(0xFFF59E0B)),
-      ('IRM en maintenance (salle 2)', Icons.engineering, Color(0xFF8B5CF6)),
-      ('Infirmiers manquants: service urgence', Icons.group_off, Color(0xFFEC4899)),
-    ];
+    if (alerts.isEmpty) {
+      return Text(
+        'Aucune alerte critique',
+        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
+      );
+    }
     return Column(
       children: alerts.map((alert) {
         final index = alerts.indexOf(alert);
@@ -654,24 +834,24 @@ class _AlertList extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: alert.$3.withOpacity(0.1),
+                    color: alert.color.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: alert.$3.withOpacity(0.3)),
+                    border: Border.all(color: alert.color.withOpacity(0.3)),
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: alert.$3.withOpacity(0.2),
+                          color: alert.color.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(alert.$2, color: alert.$3, size: 16),
+                        child: Icon(alert.icon, color: alert.color, size: 16),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          alert.$1,
+                          alert.label,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -692,17 +872,24 @@ class _AlertList extends StatelessWidget {
 }
 
 class _PerformanceList extends StatelessWidget {
-  const _PerformanceList();
+  final List<_PerformanceItemData> items;
+
+  const _PerformanceList({required this.items});
 
   @override
   Widget build(BuildContext context) {
-    const items = [
-      _PerformanceItem(label: 'Temps attente moyen', value: '28 min', progress: 0.65, color: Color(0xFF0EA5A4)),
-      _PerformanceItem(label: 'Satisfaction patients', value: '87%', progress: 0.87, color: Color(0xFF22C55E)),
-      _PerformanceItem(label: 'Ratio personnel/patients', value: '1/8', progress: 0.45, color: Color(0xFF3B82F6)),
-      _PerformanceItem(label: 'Taux occupation', value: '78%', progress: 0.78, color: Color(0xFFF59E0B)),
-    ];
-    return const Column(children: items);
+    return Column(
+      children: items
+          .map(
+            (item) => _PerformanceItem(
+              label: item.label,
+              value: item.value,
+              progress: item.progress,
+              color: item.color,
+            ),
+          )
+          .toList(),
+    );
   }
 }
 
@@ -809,17 +996,24 @@ class _PerformanceItemState extends State<_PerformanceItem> with SingleTickerPro
 }
 
 class _AgendaList extends StatelessWidget {
-  const _AgendaList();
+  final List<_AgendaEntry> items;
+
+  const _AgendaList({required this.items});
 
   @override
   Widget build(BuildContext context) {
-    const items = [
-      _AgendaItem(time: '09:00', title: 'Appendicectomie', location: 'Salle 2', status: 'En cours'),
-      _AgendaItem(time: '11:30', title: 'Tournée médecine interne', location: 'Étage 2', status: 'À venir'),
-      _AgendaItem(time: '14:30', title: 'Césarienne', location: 'Salle 1', status: 'À venir'),
-      _AgendaItem(time: '16:00', title: 'Réunion staff', location: 'Salle de conférence', status: 'À venir'),
-    ];
-    return const Column(children: items);
+    return Column(
+      children: items
+          .map(
+            (item) => _AgendaItem(
+              time: item.time,
+              title: item.title,
+              location: item.location,
+              status: item.status,
+            ),
+          )
+          .toList(),
+    );
   }
 }
 
@@ -935,4 +1129,40 @@ class _AgendaItem extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AlertItem {
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const _AlertItem({required this.label, required this.icon, required this.color});
+}
+
+class _PerformanceItemData {
+  final String label;
+  final String value;
+  final double progress;
+  final Color color;
+
+  const _PerformanceItemData({
+    required this.label,
+    required this.value,
+    required this.progress,
+    required this.color,
+  });
+}
+
+class _AgendaEntry {
+  final String time;
+  final String title;
+  final String location;
+  final String status;
+
+  const _AgendaEntry({
+    required this.time,
+    required this.title,
+    required this.location,
+    required this.status,
+  });
 }

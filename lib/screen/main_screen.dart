@@ -34,6 +34,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateMixin {
   final NotificationService _notificationService = NotificationService();
   final PermissionService _permissionService = PermissionService();
+  final ValueNotifier<int> _admissionTrigger = ValueNotifier(0);
   int selectedIndex = 0;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -135,6 +136,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
   void dispose() {
     _animationController.dispose();
     _notificationService.removeListener(_onNotificationsChanged);
+    _admissionTrigger.dispose();
     super.dispose();
   }
 
@@ -158,7 +160,18 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     });
   }
 
-  void _showQuickAdmissionNotice() {
+  void _openAdmissionForm() {
+    final index = _visibleMenuItems.indexWhere((item) => item.title == 'Patients');
+    if (index == -1) {
+      _requestAccess();
+      return;
+    }
+    setState(() {
+      selectedIndex = index;
+    });
+    _animationController.reset();
+    _animationController.forward();
+    _admissionTrigger.value += 1;
     _notificationService.showNotification(
       NotificationItem(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -175,7 +188,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
       controller: _permissionController,
       child: Scaffold(
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: canEditPatients ? _showQuickAdmissionNotice : null,
+          onPressed: canEditPatients ? _openAdmissionForm : null,
           icon: const Icon(Icons.add_circle_outline),
           label: const Text('Nouvelle admission'),
           backgroundColor: const Color(0xFF0EA5A4),
@@ -647,7 +660,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
       return DashboardScreen(fadeAnimation: _fadeAnimation);
     }
     if (selectedItem.title == 'Patients') {
-      return PatientsScreen(fadeAnimation: _fadeAnimation);
+      return PatientsScreen(fadeAnimation: _fadeAnimation, admissionTrigger: _admissionTrigger);
     }
     if (selectedItem.title == 'Urgences') {
       return UrgencesScreen(fadeAnimation: _fadeAnimation);

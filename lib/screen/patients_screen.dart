@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/patient.dart';
 import '../services/database_service.dart';
@@ -6,8 +7,9 @@ import '../widgets/permission_scope.dart';
 
 class PatientsScreen extends StatefulWidget {
   final Animation<double> fadeAnimation;
+  final ValueListenable<int>? admissionTrigger;
 
-  const PatientsScreen({super.key, required this.fadeAnimation});
+  const PatientsScreen({super.key, required this.fadeAnimation, this.admissionTrigger});
 
   @override
   State<PatientsScreen> createState() => _PatientsScreenState();
@@ -16,6 +18,7 @@ class PatientsScreen extends StatefulWidget {
 class _PatientsScreenState extends State<PatientsScreen> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fade;
+  int _lastAdmissionTrigger = 0;
   String _search = '';
   String _filterService = 'Tous';
   String _filterStatus = 'Tous';
@@ -51,6 +54,8 @@ class _PatientsScreenState extends State<PatientsScreen> with SingleTickerProvid
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _controller.forward();
     _loadPatients();
+    _lastAdmissionTrigger = widget.admissionTrigger?.value ?? 0;
+    widget.admissionTrigger?.addListener(_handleAdmissionTrigger);
   }
 
   @override
@@ -68,7 +73,18 @@ class _PatientsScreenState extends State<PatientsScreen> with SingleTickerProvid
     _allergiesController.dispose();
     _emergencyController.dispose();
     _controller.dispose();
+    widget.admissionTrigger?.removeListener(_handleAdmissionTrigger);
     super.dispose();
+  }
+
+  void _handleAdmissionTrigger() {
+    final current = widget.admissionTrigger?.value ?? _lastAdmissionTrigger;
+    if (current == _lastAdmissionTrigger) return;
+    _lastAdmissionTrigger = current;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _openAdmissionDialog();
+    });
   }
 
   Future<void> _loadPatients() async {
